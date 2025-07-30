@@ -2,3 +2,4 @@ test.py
 test_files
 *.log
 *.out
+build/*
