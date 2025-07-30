@@ -41,7 +41,6 @@ func CheckLink(url string, client http.Client, config LinksValidatorConfig, log 
 	}
 	defer resp.Body.Close()
 	log.Debug("Sucess request for URL check", slog.String("url", url), slog.String("status", resp.Status))
-
 	_, ok := config.AllowedStatuses[resp.StatusCode]
 
 	return ok

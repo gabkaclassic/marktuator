@@ -61,7 +61,8 @@ func CheckLinks(linksList []md.Link, client http.Client, cfg validator.LinksVali
 			if result.ok {
 				log.Debug("Link available:", slog.Any("link", result.link))
 			} else {
-				fmt.Println("Link unavailable:", md.LinkToString(result.link))
+				fmt.Printf("Link unavailable: %s\n", result.link)
+				log.Info("Link unavailable:", slog.Any("link", result.link))
 			}
 		}
 	}()

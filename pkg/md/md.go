@@ -18,7 +18,7 @@ type Link struct {
 	URL  string
 }
 
-func LinkToString(link *Link) string {
+func (link Link) String() string {
 	return fmt.Sprintf("[%s](%s) in file %s", link.Text, link.URL, link.File)
 }
 
