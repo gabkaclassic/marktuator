@@ -26,7 +26,7 @@ func main() {
 	client := validator.GetClient(cfg.Validator)
 
 	log.Debug("Check links for available")
-	CheckLinks(listLinks, client, cfg.Validator, log)
+	checkLinks(listLinks, client, cfg.Validator, log)
 
 	log.Debug("Marktuator finished")
 }
@@ -47,7 +47,7 @@ type CheckResult struct {
 	ok   bool
 }
 
-func CheckLinks(linksList []md.Link, client http.Client, cfg validator.LinksValidatorConfig, log *slog.Logger) {
+func checkLinks(linksList []md.Link, client http.Client, cfg validator.LinksValidatorConfig, log *slog.Logger) {
 
 	var resultsWg sync.WaitGroup
 	var handlerWg sync.WaitGroup
