@@ -47,40 +47,38 @@ type CheckResult struct {
 	ok   bool
 }
 
-func checkLinks(linksList []md.Link, client http.Client, cfg validator.LinksValidatorConfig, log *slog.Logger) {
-
+func checkLinks(
+	linksList []md.Link,
+	client http.Client,
+	cfg validator.LinksValidatorConfig,
+	log *slog.Logger,
+) []CheckResult {
 	var resultsWg sync.WaitGroup
-	var handlerWg sync.WaitGroup
-
-	var results = make(chan CheckResult, len(linksList))
-
-	handlerWg.Add(1)
-	go func() {
-		defer handlerWg.Done()
-		for result := range results {
-			if result.ok {
-				log.Debug("Link available:", slog.Any("link", result.link))
-			} else {
-				fmt.Printf("Link unavailable: %s\n", result.link)
-				log.Info("Link unavailable:", slog.Any("link", result.link))
-			}
-		}
-	}()
+	resultsCh := make(chan CheckResult, len(linksList))
 
 	for _, link := range linksList {
 		resultsWg.Add(1)
-		go func(l *md.Link) {
+		go func(l md.Link) {
 			defer resultsWg.Done()
-			results <- CheckResult{
-				ok:   validator.CheckLink(l.URL, client, cfg, log),
-				link: l,
-			}
-		}(&link)
+			ok := validator.CheckLink(l.URL, client, cfg, log)
+			resultsCh <- CheckResult{link: &l, ok: ok}
+		}(link)
 	}
 
 	resultsWg.Wait()
-	close(results)
-	handlerWg.Wait()
+	close(resultsCh)
+
+	var results []CheckResult
+	for result := range resultsCh {
+		if result.ok {
+			log.Debug("Link available:", slog.Any("link", result.link))
+		} else {
+			fmt.Printf("Link unavailable: %s\n", result.link)
+			log.Info("Link unavailable:", slog.Any("link", result.link))
+		}
+		results = append(results, result)
+	}
 
 	log.Info("All links checked")
+	return results
 }
