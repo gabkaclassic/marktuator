@@ -1,8 +1,8 @@
 package config_test
 
 import (
+	"github.com/gabkaclassic/marktuator/internal/config"
 	"log/slog"
-	"marktuator/internal/config"
 	"os"
 	"testing"
 	"time"

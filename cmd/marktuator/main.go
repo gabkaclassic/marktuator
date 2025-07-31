@@ -2,13 +2,14 @@ package main
 
 import (
 	"fmt"
+	"github.com/gabkaclassic/marktuator/internal/config"
 	"log/slog"
-	"marktuator/internal/config"
-	"marktuator/pkg/logger"
-	"marktuator/pkg/md"
-	"marktuator/pkg/url_validator"
 	"net/http"
 	"sync"
+
+	"github.com/gabkaclassic/marktuator/pkg/logger"
+	"github.com/gabkaclassic/marktuator/pkg/md"
+	"github.com/gabkaclassic/marktuator/pkg/url_validator"
 )
 
 func main() {

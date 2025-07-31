@@ -2,14 +2,15 @@ package main
 
 import (
 	"log/slog"
-	"marktuator/pkg/md"
-	"marktuator/pkg/url_validator"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/gabkaclassic/marktuator/pkg/md"
+	"github.com/gabkaclassic/marktuator/pkg/url_validator"
 )
 
 var testLogger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))

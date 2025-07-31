@@ -2,10 +2,11 @@ package logger_test
 
 import (
 	"log/slog"
-	"marktuator/pkg/logger"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/gabkaclassic/marktuator/pkg/logger"
 
 	"github.com/stretchr/testify/assert"
 )

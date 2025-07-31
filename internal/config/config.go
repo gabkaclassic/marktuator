@@ -3,12 +3,13 @@ package config
 import (
 	"flag"
 	"log/slog"
-	"marktuator/pkg/logger"
-	"marktuator/pkg/url_validator"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/gabkaclassic/marktuator/pkg/logger"
+	"github.com/gabkaclassic/marktuator/pkg/url_validator"
 )
 
 type AppConfig struct {
