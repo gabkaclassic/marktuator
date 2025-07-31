@@ -6,58 +6,131 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
 )
 
-func TestExtractLinks(t *testing.T) {
-	files := map[string][]byte{
-		"test1.md": []byte(`# Title
+var testLogger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-This is a [test link](https://example.com).
-Another [link](https://golang.org) is here.`),
-		"test2.md": []byte(`No links here.`),
+func TestExtractLinks(t *testing.T) {
+	content := []byte(`
+# Sample Document
+
+Here is a [relative link](doc2.md#section-2)
+
+And here is an [absolute link](https://example.com)
+
+And a [mailto link](mailto:test@example.com)
+`)
+
+	files := map[string][]byte{
+		"doc1.md": content,
 	}
 
-	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	links := ExtractLinks(files, testLogger)
 
-	links := ExtractLinks(files, log)
+	if len(links) != 3 {
+		t.Fatalf("expected 3 links, got %d", len(links))
+	}
 
-	assert.Len(t, links, 2)
+	tests := []struct {
+		text       string
+		url        string
+		isRelative bool
+		fragment   string
+	}{
+		{"relative link", "doc2.md#section-2", true, "section-2"},
+		{"absolute link", "https://example.com", false, ""},
+		{"mailto link", "mailto:test@example.com", false, ""},
+	}
 
-	assert.Contains(t, links, Link{
-		File: "test1.md",
-		Text: "test link",
-		URL:  "https://example.com",
-	})
+	for i, want := range tests {
+		got := links[i]
+		if got.Text != want.text || got.URL != want.url || got.IsRelative != want.isRelative || got.Fragment != want.fragment {
+			t.Errorf("link %d: got %+v, want %+v", i, got, want)
+		}
+	}
+}
 
-	assert.Contains(t, links, Link{
-		File: "test1.md",
-		Text: "link",
-		URL:  "https://golang.org",
-	})
+func TestGenerateAnchor(t *testing.T) {
+	cases := map[string]string{
+		"Heading One":     "heading-one",
+		"  Trim Me  ":     "trim-me",
+		"Special!@#":      "special",
+		"Tabs\tTabs":      "tabs-tabs",
+		"UPPER case Text": "upper-case-text",
+	}
+
+	for input, expected := range cases {
+		if got := generateAnchor(input); got != expected {
+			t.Errorf("generateAnchor(%q) = %q, want %q", input, got, expected)
+		}
+	}
+}
+
+func TestHasMDHeader(t *testing.T) {
+	content := []byte(`
+# First Header
+## Second Header
+### Another one
+`)
+
+	tests := []struct {
+		fragment string
+		want     bool
+	}{
+		{"first-header", true},
+		{"second-header", true},
+		{"another-one", true},
+		{"not-existing", false},
+	}
+
+	for _, tt := range tests {
+		if got := hasMDHeader(tt.fragment, content, testLogger); got != tt.want {
+			t.Errorf("hasMDHeader(%q) = %t, want %t", tt.fragment, got, tt.want)
+		}
+	}
+}
+
+func TestCheckRelativeLink(t *testing.T) {
+	tempDir := t.TempDir()
+
+	file1 := filepath.Join(tempDir, "doc1.md")
+	file2 := filepath.Join(tempDir, "doc2.md")
+
+	os.WriteFile(file1, []byte(`[Go to](doc2.md#section-two)`), 0644)
+	os.WriteFile(file2, []byte(`## Section Two`), 0644)
+
+	files := ReadMdFiles(tempDir, testLogger)
+	links := ExtractLinks(files, testLogger)
+
+	if len(links) != 1 {
+		t.Fatalf("expected 1 link, got %d", len(links))
+	}
+
+	link := links[0]
+
+	ok := CheckRelativeLink(link.URL, link.File, files, testLogger)
+	if !ok {
+		t.Errorf("expected link to be valid, got invalid")
+	}
 }
 
 func TestReadMdFiles(t *testing.T) {
-	tmpDir := t.TempDir()
+	tempDir := t.TempDir()
 
-	file1 := filepath.Join(tmpDir, "a.md")
-	file2 := filepath.Join(tmpDir, "b.md")
-	nonMdFile := filepath.Join(tmpDir, "not-txt")
+	err := os.WriteFile(filepath.Join(tempDir, "test.md"), []byte("# Test"), 0644)
+	if err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
 
-	os.WriteFile(file1, []byte("# Hello [Go](https://golang.org)"), 0644)
-	os.WriteFile(file2, []byte("Some [text](https://example.com) here"), 0644)
-	os.WriteFile(nonMdFile, []byte("Should still be read"), 0644)
+	files := ReadMdFiles(tempDir, testLogger)
 
-	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	if len(files) != 1 {
+		t.Errorf("expected 1 file, got %d", len(files))
+	}
 
-	files := ReadMdFiles(tmpDir, log)
-
-	assert.Len(t, files, 3)
-
-	assert.Contains(t, files, file1)
-	assert.Contains(t, files, file2)
-	assert.Contains(t, files, nonMdFile)
-
-	assert.True(t, strings.Contains(string(files[file1]), "Go"))
+	for name := range files {
+		if !strings.HasSuffix(name, "test.md") {
+			t.Errorf("unexpected file name: %s", name)
+		}
+	}
 }
