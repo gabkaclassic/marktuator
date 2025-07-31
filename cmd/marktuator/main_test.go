@@ -2,89 +2,120 @@ package main
 
 import (
 	"log/slog"
-	"marktuator/pkg/logger"
 	"marktuator/pkg/md"
-	"marktuator/pkg/validator"
+	"marktuator/pkg/url_validator"
 	"net/http"
-	"net/http/httptest"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
-
-	"github.com/stretchr/testify/assert"
 )
 
-func TestSetupLogger(t *testing.T) {
-	cfg := logger.LoggerConfig{
-		OutputToFile: false,
-		FilePath:     "",
-		Level:        slog.LevelDebug,
-		UseJSON:      false,
-	}
+var testLogger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-	log := setupLogger(cfg)
-	assert.NotNil(t, log)
-
-	cfg.UseJSON = true
-	log = setupLogger(cfg)
-	assert.NotNil(t, log)
-
-	tmpFile, err := os.CreateTemp(t.TempDir(), "logfile*.log")
-	assert.NoError(t, err)
-	defer tmpFile.Close()
-
-	cfg = logger.LoggerConfig{
-		OutputToFile: true,
-		FilePath:     tmpFile.Name(),
-		Level:        slog.LevelInfo,
-		UseJSON:      false,
-	}
-
-	log = setupLogger(cfg)
-	assert.NotNil(t, log)
-
-	log.Info("Test log entry")
-
-	content, err := os.ReadFile(tmpFile.Name())
-	assert.NoError(t, err)
-	assert.Contains(t, string(content), "Test log entry")
+type mockRoundTripper struct {
+	statusCodes map[string]int
 }
 
-func TestCheckLinks_ReturnsResults(t *testing.T) {
-	okServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer okServer.Close()
+func (m *mockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	code := m.statusCodes[req.URL.String()]
+	if code == 0 {
+		code = 404
+	}
+	return &http.Response{
+		StatusCode: code,
+		Body:       http.NoBody,
+		Request:    req,
+	}, nil
+}
 
-	failServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer failServer.Close()
+func TestCheckLinks_RelativeLinks(t *testing.T) {
+	tmp := t.TempDir()
 
-	links := []md.Link{
-		{File: "test.md", Text: "ok", URL: okServer.URL},
-		{File: "test.md", Text: "fail", URL: failServer.URL},
+	mdFile1 := filepath.Join(tmp, "doc1.md")
+	mdFile2 := filepath.Join(tmp, "doc2.md")
+
+	err := os.WriteFile(mdFile1, []byte(`[OK](doc2.md#section-ok) [FAIL](doc2.md#not-there)`), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.WriteFile(mdFile2, []byte(`## Section OK`), 0644)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	cfg := validator.LinksValidatorConfig{
-		AllowedStatuses: validator.PrepareAllowedStatuses(200),
+	files := md.ReadMdFiles(tmp, testLogger)
+	links := md.ExtractLinks(files, testLogger)
+
+	if len(links) != 2 {
+		t.Fatalf("expected 2 links, got %d", len(links))
+	}
+
+	cfg := url_validator.LinksValidatorConfig{
+		AllowedStatuses: url_validator.PrepareAllowedStatuses(200),
 		Timeout:         2 * time.Second,
 	}
-	client := validator.GetClient(cfg)
-	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-	results := checkLinks(links, client, cfg, log)
+	results := checkLinks(links, http.Client{}, cfg, files, testLogger)
 
-	assert.Len(t, results, 2)
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
 
-	for _, result := range results {
-		switch result.link.URL {
-		case okServer.URL:
-			assert.True(t, result.ok, "Expected OK for %s", result.link.URL)
-		case failServer.URL:
-			assert.False(t, result.ok, "Expected FAIL for %s", result.link.URL)
-		default:
-			t.Errorf("Unexpected URL: %s", result.link.URL)
+	for _, r := range results {
+		if strings.Contains(r.link.Fragment, "not-there") && r.ok {
+			t.Errorf("expected broken link to fail, got OK")
+		}
+		if strings.Contains(r.link.Fragment, "section-ok") && !r.ok {
+			t.Errorf("expected valid link to succeed, got FAIL")
+		}
+	}
+}
+
+func TestCheckLinks_AbsoluteLinks(t *testing.T) {
+	links := []md.Link{
+		{
+			File:       "dummy.md",
+			Text:       "Valid link",
+			URL:        "https://example.com",
+			IsRelative: false,
+		},
+		{
+			File:       "dummy.md",
+			Text:       "Broken link",
+			URL:        "https://doesnotexist.example",
+			IsRelative: false,
+		},
+	}
+
+	mockClient := http.Client{
+		Transport: &mockRoundTripper{
+			statusCodes: map[string]int{
+				"https://example.com":          200,
+				"https://doesnotexist.example": 404,
+			},
+		},
+		Timeout: 1 * time.Second,
+	}
+
+	cfg := url_validator.LinksValidatorConfig{
+		AllowedStatuses: url_validator.PrepareAllowedStatuses(200),
+		Timeout:         1 * time.Second,
+	}
+
+	results := checkLinks(links, mockClient, cfg, nil, testLogger)
+
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+
+	for _, r := range results {
+		if r.link.URL == "https://example.com" && !r.ok {
+			t.Errorf("expected 200 OK link to pass, got fail")
+		}
+		if r.link.URL == "https://doesnotexist.example" && r.ok {
+			t.Errorf("expected 404 link to fail, got success")
 		}
 	}
 }
