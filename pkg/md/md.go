@@ -76,15 +76,22 @@ func ExtractLinks(files map[string][]byte, log *slog.Logger) []Link {
 }
 
 func extractText(node ast.Node, content []byte) string {
-	var text string
+	var sb strings.Builder
 
-	for child := node.FirstChild(); child != nil; child = child.NextSibling() {
-		if txt, ok := child.(*ast.Text); ok {
-			text += string(txt.Value(content))
+	var extract func(n ast.Node)
+	extract = func(n ast.Node) {
+		for child := n.FirstChild(); child != nil; child = child.NextSibling() {
+			switch c := child.(type) {
+			case *ast.Text:
+				sb.Write(c.Segment.Value(content))
+			default:
+				extract(child)
+			}
 		}
 	}
 
-	return text
+	extract(node)
+	return sb.String()
 }
 
 func ReadMdFiles(path string, log *slog.Logger) map[string][]byte {
