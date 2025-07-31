@@ -4,7 +4,7 @@ import (
 	"flag"
 	"log/slog"
 	"marktuator/pkg/logger"
-	"marktuator/pkg/validator"
+	"marktuator/pkg/url_validator"
 	"os"
 	"strconv"
 	"strings"
@@ -12,7 +12,7 @@ import (
 )
 
 type AppConfig struct {
-	Validator  validator.LinksValidatorConfig
+	Validator  url_validator.LinksValidatorConfig
 	Logger     logger.LoggerConfig
 	TargetPath string
 }
@@ -45,7 +45,7 @@ func ParseConfig() AppConfig {
 	return cfg
 }
 
-func ParseValidatorConfig(timeout int, statusStr string) validator.LinksValidatorConfig {
+func ParseValidatorConfig(timeout int, statusStr string) url_validator.LinksValidatorConfig {
 	statuses := strings.Split(statusStr, ",")
 	allowedStatuses := make([]int, 0, len(statuses))
 
@@ -58,8 +58,8 @@ func ParseValidatorConfig(timeout int, statusStr string) validator.LinksValidato
 		allowedStatuses = append(allowedStatuses, status)
 	}
 
-	return validator.LinksValidatorConfig{
-		AllowedStatuses: validator.PrepareAllowedStatuses(allowedStatuses...),
+	return url_validator.LinksValidatorConfig{
+		AllowedStatuses: url_validator.PrepareAllowedStatuses(allowedStatuses...),
 		Timeout:         time.Duration(timeout) * time.Second,
 	}
 }

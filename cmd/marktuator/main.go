@@ -6,7 +6,7 @@ import (
 	"marktuator/internal/config"
 	"marktuator/pkg/logger"
 	"marktuator/pkg/md"
-	"marktuator/pkg/validator"
+	"marktuator/pkg/url_validator"
 	"net/http"
 	"sync"
 )
@@ -22,11 +22,11 @@ func main() {
 	log.Debug("Extract links from MD files")
 	listLinks := md.ExtractLinks(content, log)
 
-	log.Debug("Create HTTP client for validator")
-	client := validator.GetClient(cfg.Validator)
+	log.Debug("Create HTTP client for url_validator")
+	client := url_validator.GetClient(cfg.Validator)
 
 	log.Debug("Check links for available")
-	checkLinks(listLinks, client, cfg.Validator, log)
+	checkLinks(listLinks, client, cfg.Validator, content, log)
 
 	log.Debug("Marktuator finished")
 }
@@ -50,7 +50,8 @@ type CheckResult struct {
 func checkLinks(
 	linksList []md.Link,
 	client http.Client,
-	cfg validator.LinksValidatorConfig,
+	cfg url_validator.LinksValidatorConfig,
+	files map[string][]byte,
 	log *slog.Logger,
 ) []CheckResult {
 	var resultsWg sync.WaitGroup
@@ -60,7 +61,12 @@ func checkLinks(
 		resultsWg.Add(1)
 		go func(l md.Link) {
 			defer resultsWg.Done()
-			ok := validator.CheckLink(l.URL, client, cfg, log)
+			var ok bool
+			if l.IsRelative {
+				ok = md.CheckRelativeLink(l.URL, l.File, files, log)
+			} else {
+				ok = url_validator.CheckLink(l.URL, client, cfg, log)
+			}
 			resultsCh <- CheckResult{link: &l, ok: ok}
 		}(link)
 	}

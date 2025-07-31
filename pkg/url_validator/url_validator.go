@@ -1,4 +1,4 @@
-package validator
+package url_validator
 
 import (
 	"log/slog"
